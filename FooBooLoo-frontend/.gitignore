@@ -22,3 +22,19 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Node.js & React
+node_modules/
+dist/
+.vscode/
+.env
+
+# ASP.NET & SQL Server
+bin/
+obj/
+appsettings.Development.json
+appsettings.json
+
+# General
+.DS_Store
+Thumbs.db
+*.log

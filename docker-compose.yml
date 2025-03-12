@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver_container
+    restart: always
+    environment:
+      SA_PASSWORD: "YourPassw0rd123!"
+      ACCEPT_EULA: "Y"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sql_data:/var/opt/mssql
+
+  backend:
+    build:
+      context: ./FooBooLoo-backend
+      dockerfile: Dockerfile
+    container_name: backend_container
+    restart: always
+    ports:
+      - "7124:80"
+    depends_on:
+      - sqlserver
+    environment:
+      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=FooBooLooDb;User Id=sa;Password=YourPassw0rd123!;TrustServerCertificate=True;
+
+  frontend:
+    build:
+      context: ./FooBooLoo-frontend
+      dockerfile: Dockerfile
+    container_name: frontend_container
+    restart: always
+    ports:
+      - "3000:80"  # Exposes frontend on localhost:3000
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_BASE_URL=http://backend/api  # Correct API URL for frontend
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_container
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./FooBooLoo-frontend/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  sql_data:

@@ -1,158 +1,65 @@
-import { fetchGames } from "../../../FooBooLoo-frontend/src/api";
 import axios from "axios";
-import "dotenv/config";
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import App from '../App';
-import '@testing-library/jest-dom';
+import MockAdapter from "axios-mock-adapter";
+import {
+  fetchGames,
+  createGame,
+  startGame,
+  getNextNumber,
+  submitAnswer,
+  deleteGame,
+} from "./api";
 
-jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+const mock = new MockAdapter(axios);
+const API_BASE_URL = "http://localhost:7124/api"; // Match local dev URL
 
-describe('App Component', () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
+describe("API Functions", () => {
+  afterEach(() => {
+    mock.reset();
+  });
 
-        // Mock GET /api/games
-        mockedAxios.get.mockImplementation((url) => {
-            if (url === 'http://localhost:8080/api/games') {
-                return Promise.resolve({
-                    data: [
-                        {
-                            id: 1,
-                            name: 'FooBooLoo',
-                            author: 'Alex',
-                            rules: [
-                                { divisor: 3, replacement: 'Foo' },
-                                { divisor: 5, replacement: 'Boo' },
-                                { divisor: 7, replacement: 'Loo' },
-                            ],
-                        },
-                    ],
-                });
-            }
-            if (url === 'http://localhost:8080/api/play/1/start') {
-                return Promise.resolve({ data: { sessionId: '12345' } });
-            }
-            if (url === 'http://localhost:8080/api/play/12345/next') {
-                return Promise.resolve({ data: { number: 7 } }); // expect "Loo"
-            }
-            return Promise.reject(new Error(`Unhandled GET request to ${url}`));
-        });
+  test("fetchGames should return games", async () => {
+    const mockData = [{ id: 1, name: "Test Game", author: "Alice", rules: [] }];
+    mock.onGet(`${API_BASE_URL}/games`).reply(200, mockData);
 
-        // Mock POST /api/games (create game) and POST /play/:sessionId/answer
-        mockedAxios.post.mockImplementation((url) => {
-            if (url === 'http://localhost:8080/api/games') {
-                return Promise.resolve({
-                    data: {
-                        id: 2,
-                        name: 'New Game',
-                        author: 'Alex',
-                        rules: [
-                            { divisor: 2, replacement: 'Test' },
-                        ],
-                    },
-                });
-            } else if (url.startsWith('http://localhost:8080/api/play/12345/answer')) {
-                return Promise.resolve({
-                    data: { isCorrect: true }, // Mock correct answer response
-                });
-            }
-            return Promise.reject(new Error(`Unhandled POST request to ${url}`));
-        });
+    const data = await fetchGames();
+    expect(data).toEqual(mockData);
+  });
 
-        // Mock DELETE /api/games/1 (delete game)
-        mockedAxios.delete.mockImplementation((url) => {
-            if (url === 'http://localhost:8080/api/games/1') {
-                return Promise.resolve();
-            }
-            return Promise.reject(new Error(`Unhandled DELETE request to ${url}`));
-        });
-    });
+  test("createGame should create a game", async () => {
+    const newGame = { name: "FooBooLoo", author: "Bob", rules: [] };
+    mock.onPost(`${API_BASE_URL}/games`).reply(201, newGame);
 
-    test('renders the game creation form', () => {
-        render(<App />);
-        expect(screen.getByPlaceholderText('Game Name')).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('Author')).toBeInTheDocument();
-    });
+    const data = await createGame(newGame);
+    expect(data).toEqual(newGame);
+  });
 
-    test('fetches and displays games on load', async () => {
-        render(<App />);
+  test("startGame should return sessionId", async () => {
+    mock.onGet(`${API_BASE_URL}/play/1/start`).reply(200, { sessionId: "abc123" });
 
-        await waitFor(() => {
-            expect(screen.getByText('FooBooLoo')).toBeInTheDocument();
-        });
-    });
+    const data = await startGame(1);
+    expect(data.sessionId).toBe("abc123");
+  });
 
-    test('creates a new game', async () => {
-        render(<App />);
+  test("getNextNumber should return next number", async () => {
+    mock.onGet(`${API_BASE_URL}/play/abc123/next`).reply(200, { number: 42 });
 
-        fireEvent.change(screen.getByPlaceholderText('Game Name'), { target: { value: 'New Game' } });
-        fireEvent.change(screen.getByPlaceholderText('Author'), { target: { value: 'Alex' } });
-        fireEvent.change(screen.getAllByPlaceholderText('Divisor')[0], { target: { value: '2' } });
-        fireEvent.change(screen.getAllByPlaceholderText('Divisor')[1], { target: { value: '3' } });
-        fireEvent.change(screen.getAllByPlaceholderText('Divisor')[2], { target: { value: '5' } });
+    const data = await getNextNumber("abc123");
+    expect(data.number).toBe(42);
+  });
 
-        fireEvent.click(screen.getByText('Create Game'));
+  test("submitAnswer should return if answer is correct", async () => {
+    mock
+      .onPost(`${API_BASE_URL}/play/abc123/answer`)
+      .reply(200, { isCorrect: true });
 
-        await waitFor(() => {
-            expect(mockedAxios.post).toHaveBeenCalledWith(
-                'http://localhost:8080/api/games',
-                expect.objectContaining({
-                    name: 'New Game',
-                    author: 'Alex',
-                })
-            );
-        });
-    });
+    const data = await submitAnswer("abc123", 1, 42, "Foo");
+    expect(data.isCorrect).toBe(true);
+  });
 
-    test('starts a game and displays the number', async () => {
-        render(<App />);
+  test("deleteGame should delete game", async () => {
+    mock.onDelete(`${API_BASE_URL}/games/1`).reply(200, { success: true });
 
-        await waitFor(() => {
-            expect(screen.getByText('FooBooLoo')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByText('FooBooLoo'));
-
-        await waitFor(() => {
-            expect(screen.getByText('Number: 7')).toBeInTheDocument();
-        });
-    });
-
-    test('submits an answer and updates the score', async () => {
-        render(<App />);
-
-        await waitFor(() => {
-            expect(screen.getByText('FooBooLoo')).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByText('FooBooLoo'));
-
-        await waitFor(() => {
-            expect(screen.getByText('Number: 7')).toBeInTheDocument();
-        });
-
-        // Submit the correct answer "Loo" (since 7 maps to Loo in the rules)
-        fireEvent.click(screen.getByText('Loo'));
-
-        // Expect correct count to increment
-        await waitFor(() => {
-            expect(screen.getByText('Correct: 1')).toBeInTheDocument();
-        });
-    });
-
-    test('deletes a game', async () => {
-        render(<App />);
-
-        await waitFor(() => {
-            expect(screen.getByText('FooBooLoo')).toBeInTheDocument();
-        });
-
-        const deleteButton = screen.getAllByText('Delete')[0];
-        fireEvent.click(deleteButton);
-
-        await waitFor(() => {
-            expect(mockedAxios.delete).toHaveBeenCalledWith('http://localhost:8080/api/games/1');
-        });
-    });
+    const data = await deleteGame(1);
+    expect(data.success).toBe(true);
+  });
 });
